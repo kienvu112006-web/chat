@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Broadcast Chat Room - Multi-Client Web App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['Fira Code', 'monospace'] },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-900 text-slate-100 h-full flex flex-col font-sans antialiased overflow-hidden">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex items-center justify-between shrink-0 shadow-md">
+        <div class="flex items-center space-x-3">
+            <div class="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-500/30">
+                <i class="fa-solid fa-comments text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-wide flex items-center gap-2">
+                    Phòng Chat Nhóm Đa Luồng 
+                    <span class="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">Multi-Tab Sync</span>
+                </h1>
+                <p class="text-xs text-slate-400">Mô phỏng Socket TCP Broadcast & Multi-threading</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="hidden sm:flex items-center space-x-2 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300">
+                <i class="fa-solid fa-server text-indigo-400"></i>
+                <span>Host: <strong class="text-white">127.0.0.1:12345</strong></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Sidebar -->
+        <aside class="w-64 bg-slate-950 border-r border-slate-800 flex flex-col shrink-0 hidden md:flex">
+            <div class="p-4 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Trạng thái kết nối</span>
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </div>
+            <div class="p-4 space-y-3 text-xs text-slate-300">
+                <div class="bg-indigo-600/10 border border-indigo-500/30 p-3 rounded-xl">
+                    <p class="font-semibold text-indigo-300 mb-1"><i class="fa-solid fa-circle-info"></i> Hướng dẫn test:</p>
+                    <p class="text-slate-400 leading-relaxed">Hãy mở file này trên 2 hoặc 3 tab trình duyệt khác nhau. Khi bạn nhắn tin ở tab này, các tab còn lại sẽ tự động nhận được tin nhắn tức thì!</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Chat Area -->
+        <main class="flex-1 flex flex-col bg-slate-900 relative">
+            <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="text-center my-2">
+                    <span class="bg-slate-800 text-slate-400 text-xs px-3 py-1 rounded-full border border-slate-700">
+                        🔒 Đã thiết lập kết nối TCP Broadcast thành công
+                    </span>
+                </div>
+            </div>
+
+            <!-- Input Form -->
+            <div class="p-4 bg-slate-950 border-t border-slate-800">
+                <form id="chatForm" onsubmit="sendMessage(event)" class="flex items-center space-x-2">
+                    <div class="relative flex-1">
+                        <input type="text" id="messageInput" placeholder="Nhập tin nhắn broadcast tới các client khác..." 
+                            class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+                    </div>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-medium text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/30 shrink-0">
+                        <span>Gửi</span>
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <!-- JavaScript Sync Logic -->
+    <script>
+        // Tạo một kênh truyền thông tin giả lập giữa các tab trình duyệt
+        const chatChannel = new BroadcastChannel('socket_chat_sync_channel');
+        const clientId = 'Client_' + Math.floor(Math.random() * 900 + 100); // Tạo tên client ngẫu nhiên cho mỗi tab
+        
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Lắng nghe tin nhắn từ các tab khác gửi tới
+        chatChannel.onmessage = function (event) {
+            const data = event.data;
+            if (data.senderId !== clientId) {
+                appendMessage(data.senderId, data.text, false, data.time);
+            }
+        };
+
+        function sendMessage(e) {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            const time = getCurrentTime();
+
+            // Hiển thị tin nhắn ở tab hiện tại (phía mình gửi)
+            appendMessage(clientId, text, true, time);
+
+            // Phát tán (Broadcast) tin nhắn sang tất cả các tab trình duyệt khác đang mở
+            chatChannel.postMessage({
+                senderId: clientId,
+                text: text,
+                time: time
+            });
+
+            messageInput.value = '';
+        }
+
+        function appendMessage(sender, text, isMe, time) {
+            let msgHTML = '';
+            if (isMe) {
+                msgHTML = `
+                    <div class="flex items-start justify-end space-x-3">
+                        <div class="bg-indigo-600 text-white border border-indigo-500 rounded-2xl rounded-tr-sm px-4 py-3 max-w-lg text-sm shadow-sm">
+                            <div class="flex items-center justify-between mb-1 space-x-4">
+                                <span class="text-[10px] text-indigo-200">${time}</span>
+                                <span class="font-semibold text-xs text-indigo-100">Bạn (${sender})</span>
+                            </div>
+                            <p class="text-white">${escapeHtml(text)}</p>
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-indigo-700 flex items-center justify-center text-white shrink-0 text-xs font-bold shadow">Me</div>
+                    </div>
+                `;
+            } else {
+                msgHTML = `
+                    <div class="flex items-start space-x-3 animate-fade-in">
+                        <div class="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white shrink-0 text-xs font-bold shadow">
+                            ${sender.substring(0, 3)}
+                        </div>
+                        <div class="bg-slate-800 border border-slate-700/80 rounded-2xl rounded-tl-sm px-4 py-3 max-w-lg text-sm shadow-sm">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-semibold text-xs text-emerald-400">${sender}</span>
+                                <span class="text-[10px] text-slate-500">${time}</span>
+                            </div>
+                            <p class="text-slate-200">${escapeHtml(text)}</p>
+                        </div>
+                    </div>
+                `;
+            }
+            chatMessages.insertAdjacentHTML('beforeend', msgHTML);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+    </script>
+</body>
+</html>
